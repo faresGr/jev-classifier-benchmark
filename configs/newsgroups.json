@@ -1,0 +1,16 @@
+{
+  "dataset": "newsgroups",
+  "split_seed": 42,
+  "training_seeds": [11, 22, 33],
+  "train_per_class": [10, 50, 200],
+  "validation_per_class": 50,
+  "test_per_class": 100,
+  "max_chars": 8000,
+  "models": ["dummy", "logreg", "naive_bayes", "linear_svm", "xgboost_tfidf", "xgboost_svd"],
+  "max_features": 20000,
+  "svd_components": 128,
+  "xgb_estimators": 150,
+  "threads": 2,
+  "bootstrap_samples": 1000,
+  "jev": {"model": "jev-latest", "timeout_seconds": 30, "max_attempts": 3}
+}

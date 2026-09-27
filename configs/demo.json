@@ -1,0 +1,16 @@
+{
+  "dataset": "demo",
+  "split_seed": 42,
+  "training_seeds": [11],
+  "train_per_class": [6, 12],
+  "validation_per_class": 6,
+  "test_per_class": 8,
+  "max_chars": 8000,
+  "models": ["dummy", "logreg", "naive_bayes", "linear_svm", "xgboost_tfidf", "xgboost_svd"],
+  "max_features": 15000,
+  "svd_components": 32,
+  "xgb_estimators": 40,
+  "threads": 2,
+  "bootstrap_samples": 200,
+  "jev": {"model": "jev-latest", "timeout_seconds": 30, "max_attempts": 3}
+}
