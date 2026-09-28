@@ -158,3 +158,100 @@ def test_cli_live_path_with_mock_transport(tmp_path, monkeypatch):
     assert results[-1]["billing"]["known_response_token_cost_usd"] == pytest.approx(32 * 120 / 1e6)
     assert (tmp_path / "run/calibration.png").exists()
     assert "mock-secret" not in (tmp_path / "run/metadata.json").read_text()
+
+
+# --- Public Hugging Face datasets (Hub access mocked; no network) ---
+from jev_benchmark import public
+
+
+def fake_hub(label_names, fields, per_split=40, splits=("train", "test")):
+    def load(repo, revision, cache_dir):
+        data = {}
+        for split in splits:
+            rows = []
+            for li, name in enumerate(label_names):
+                for i in range(per_split):
+                    body = f"{split} {name} example {i} " + " ".join(f"w{li}_{k}" for k in range(5))
+                    rows.append({**{f: body for f in fields}, "label": li, "label_name": name})
+            data[split] = rows
+        return data, list(label_names), revision or "abc123"
+    return load
+
+
+PUBLIC_CASES = {
+    "ag_news": (list(public.AG_NEWS), ["text"], ("train", "test")),
+    "dbpedia_14": (list(public.DBPEDIA_14), ["title", "content"], ("train", "test")),
+    "imdb": (list(public.IMDB), ["text"], ("train", "test", "unsupervised")),
+    "emotion": (list(public.EMOTION), ["text"], ("train", "validation", "test")),
+    "banking77": ([f"intent_{i}" for i in range(77)], ["text"], ("train", "test")),
+}
+
+
+@pytest.mark.parametrize("name", PUBLIC_CASES)
+def test_public_dataset_prepare(name, tmp_path, monkeypatch):
+    names, fields, splits = PUBLIC_CASES[name]
+    monkeypatch.setattr(public, "load_hf", fake_hub(names, fields, splits=splits))
+    config = json.loads((ROOT / f"configs/{name}.json").read_text())
+    config.update(train_per_class=[5, 10], validation_per_class=5, test_per_class=5, max_train_pool_per_class=12)
+    prepare(config, tmp_path / "data")
+    rows, labels, meta = load_bundle(tmp_path / "data")
+    assert set(labels) == set(names) and all(labels.values())
+    assert meta["provenance"]["hub_revision"] == "abc123"
+    for label in names:
+        counts = {s: sum(r["label"] == label and r["split"] == s for r in rows) for s in ("train", "validation", "test")}
+        assert counts == {"train": 12, "validation": 5, "test": 5}
+    # Test examples come only from the source test split.
+    assert all(r["text"].startswith("test ") for r in rows if r["split"] == "test")
+    assert not any(r["text"].startswith("unsupervised") for r in rows)
+
+
+def test_public_label_drift_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(public, "load_hf", fake_hub(["World", "Sports", "Money"], ["text"]))
+    config = json.loads((ROOT / "configs/ag_news.json").read_text())
+    with pytest.raises(ValueError, match="label names changed"):
+        prepare(config, tmp_path / "data")
+
+
+def test_public_fallback_repo_and_duplicate_removed_from_test(tmp_path, monkeypatch):
+    calls = []
+    base = fake_hub([f"intent_{i}" for i in range(3)], ["text"])
+    def load(repo, revision, cache_dir):
+        calls.append(repo)
+        if repo == "PolyAI/banking77":
+            raise RuntimeError("Dataset scripts are no longer supported")
+        data, names, sha = base(repo, revision, cache_dir)
+        data["test"][0]["text"] = data["train"][0]["text"]  # leaked duplicate
+        return data, names, sha
+    monkeypatch.setattr(public, "load_hf", load)
+    raw, labels, prov = public.fetch("banking77", str(tmp_path))
+    assert calls == ["PolyAI/banking77", "mteb/banking77"] and prov["hub_repo"] == "mteb/banking77"
+    assert labels["intent_0"].endswith("intent 0.")
+    config = json.loads((ROOT / "configs/banking77.json").read_text())
+    config.update(train_per_class=[5], validation_per_class=5, test_per_class=39)
+    # intent_0 keeps 39 of 40 test texts: the copy of a training text is dropped.
+    with pytest.raises(ValueError, match="intent_0: 39 available, 40 requested"):
+        prepare({**config, "test_per_class": 40}, tmp_path / "data")
+    prepare(config, tmp_path / "data")
+
+
+def test_pool_cap_must_cover_budget():
+    from jev_benchmark.cli import load_config
+    import tempfile
+    config = json.loads((ROOT / "configs/ag_news.json").read_text())
+    config["max_train_pool_per_class"] = 100
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(config, f)
+    with pytest.raises(ValueError, match="max_train_pool_per_class"):
+        load_config(f.name)
+
+
+def test_rounded_probabilities_accepted_and_renormalized():
+    labels = [f"l{i}" for i in range(77)]
+    probs = {l: 0.0 for l in labels}
+    probs.update(l0=0.8, l1=0.13, l2=0.06)  # sums to 0.99, as observed from Jev
+    body = {"answers": {"category": {"type": "choice", "choice": "l0", "confidence": 0.8, "probabilities": probs}}}
+    p, confidence, choice = parse_answer(body, labels)
+    assert choice == "l0" and sum(p) == pytest.approx(1)
+    probs["l2"] = 0.2  # sums to 1.13: still rejected
+    with pytest.raises(ValueError, match="distribution"):
+        parse_answer(body, labels)

@@ -15,6 +15,7 @@ import numpy as np
 from .data import dump, load_bundle, prepare, training_subset
 from .jev import ENDPOINT, INSTRUCTIONS, classify
 from .metrics import evaluate
+from .public import DATASETS as PUBLIC_DATASETS
 from .models import fit_best, predict_local
 from .report import make_report
 
@@ -32,6 +33,9 @@ def load_config(path):
     for key in ("max_chars", "max_features", "svd_components", "xgb_estimators", "threads", "bootstrap_samples", "validation_per_class", "test_per_class"):
         if c[key] <= 0:
             raise ValueError(f"{key} must be positive")
+    cap = c.get("max_train_pool_per_class")
+    if cap is not None and cap < max(c["train_per_class"]):
+        raise ValueError("max_train_pool_per_class must be at least the largest training budget")
     if not 1 <= c["jev"]["max_attempts"] <= 10 or c["jev"]["timeout_seconds"] <= 0:
         raise ValueError("Invalid Jev retry/timeout settings")
     return c
@@ -75,7 +79,7 @@ def run(args, config):
         "python": sys.version, "platform": platform.platform(), "processor": platform.processor(),
         "source_sha256": source_hash.hexdigest(), "validation_label_count": len(validation),
         "test_ids": [r["id"] for r in test], "with_jev": args.with_jev,
-        "jev_endpoint": ENDPOINT, "jev_instructions": INSTRUCTIONS,
+        "jev_endpoint": ENDPOINT, "jev_instructions": config["jev"].get("instructions", INSTRUCTIONS),
         "input_price_per_million": args.input_price, "output_price_per_million": args.output_price,
         "inference_concurrency": 1}
     dump(out / "metadata.json", meta)
@@ -157,7 +161,13 @@ def main():
     r.add_argument("--with-jev", action="store_true", help="Send held-out texts to TypeSafe (paid API)")
     r.add_argument("--input-price", type=float, help="Current USD per million input tokens; no default assumption")
     r.add_argument("--output-price", type=float, help="Current USD per million output tokens")
+    sub.add_parser("list-datasets", help="Show the built-in public datasets")
     args = parser.parse_args()
+    if args.command == "list-datasets":
+        print("newsgroups   20 Newsgroups, 4 topics (scikit-learn download)")
+        for name, spec in PUBLIC_DATASETS.items():
+            print(f"{name:<12} {spec['title']} (Hugging Face: {spec['repos'][0]})")
+        return
     try:
         config = load_config(args.config)
         if args.command == "prepare":

@@ -46,7 +46,10 @@ def make_report(destination, runs, meta):
     axes[1].set(xlabel="Coverage among valid responses", ylabel="Error among accepted predictions", title="Risk–coverage (descriptive test curves)", xlim=(0, 1), ylim=(0, 1))
     axes[1].legend(fontsize=8)
     fig.tight_layout(); fig.savefig(dest / "calibration.png", dpi=170); plt.close(fig)
-    lines = ["# Classifier benchmark report", "",
+    prov = meta["dataset"].get("provenance") or {}
+    dataset_line = (f"Dataset: **{prov['title']}** — `{prov['hub_repo']}` at Hub revision `{prov['hub_revision']}`."
+                    if prov else f"Dataset: **{meta['dataset']['source']}**.")
+    lines = ["# Classifier benchmark report", "", dataset_line, "",
         "**Synthetic demonstration only — not evidence of real-world model quality.**" if meta["synthetic"] else "Public/custom dataset benchmark; inspect the caveats before publishing.", "",
         "| Model | Train labels | Seed | Test accuracy | Macro-F1 | Failed | p50 ms | p95 ms |",
         "|---|---:|---:|---:|---:|---:|---:|---:|"]
@@ -61,7 +64,7 @@ def make_report(destination, runs, meta):
         "Latency is sequential single-example wall time. Local models include vectorization after one warm-up; Jev includes network time, its first request, retries and backoff. These are deployment timings, not an equal-hardware architecture comparison. Runs are not cached. Training/tuning time is reported separately in results.json.", "",
         "## Cost and limits", "",
         "Local compute, labeling and engineering costs are not assumed to be zero. Jev token charges are estimated only if you supply current prices. Retry billing and missing usage can make that estimate a lower bound. No aggregate cost-per-correct claim is made from incomplete billing data.", "",
-        "Inspect metadata.json for dataset hashes, configuration, software versions and machine information. Predictions are in predictions.jsonl, including errors and Jev's raw response/usage when available. The public dataset is old and may overlap foundation-model pretraining; exact duplicates are removed but near-duplicate threads may remain. Use a private or newly collected labeled holdout before making broad claims."]
+        "Inspect metadata.json for dataset hashes, configuration, software versions and machine information. Predictions are in predictions.jsonl, including errors and Jev's raw response/usage when available. Well-known public datasets may overlap foundation-model pretraining, which can favour Jev; exact duplicates are removed but near-duplicates may remain. Use a private or newly collected labeled holdout before making broad claims."]
     if "jev" not in groups:
         lines += ["", "**Jev has not been run in this report. No Jev comparison result is available yet.**"]
     else:

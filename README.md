@@ -1,8 +1,20 @@
 # Jev versus classical text classifiers
 
-A Python experiment for the question: **how much labeled data does a classical classifier need to match Jev on a text-classification task?**
+A Python experiment for the question: **how much labeled data does a classical classifier need to match Jev on a text-classification task?** It ships with 20 Newsgroups plus five other well-known text-classification datasets (AG News, DBpedia-14, IMDB, Emotion, Banking77).
 
 This project compares six classical configurations with an optional live Jev run, using identical held-out texts. It produces learning curves, calibration plots, a Markdown report, and auditable JSON/JSONL records. No Jev results are simulated.
+
+## Published experiment
+
+The [blog post](https://faresgr.github.io/blog/2026/how-many-labels-is-a-description-worth/) compares Jev with the classical baselines on AG News, Banking77 and Emotion. The [saved predictions and corrected reports](published-results/README.md) include all five nontrivial classical configurations, the dummy control and actual Jev outputs.
+
+To reproduce the scoring, paired intervals and blog charts **without an API key**:
+
+```sh
+python scripts/publish_analysis.py
+```
+
+See `published-results/README.md` for exact label budgets, provenance, parser correction and interpretation limits. `scripts/prompt_followup.py` runs a separate, explicitly post-hoc prompt sensitivity check; it requires a key and makes paid API calls. Optional task instructions can also be supplied via `jev.instructions` in a normal run config, and are recorded in run metadata.
 
 ## Models
 
@@ -24,7 +36,7 @@ Python 3.11 or newer:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # fish: source .venv/bin/activate.fish
 python -m pip install -e '.[dev]'
 ```
 
@@ -61,6 +73,51 @@ The original public test partition supplies the test examples. The original trai
 The full run has **6 models × 3 budgets × 3 seeds = 54 configurations**, each with its documented candidate search. Edit the config for a smaller pilot. The default uses two XGBoost threads and up to 20,000 TF-IDF features. Runtime depends on your machine.
 
 20 Newsgroups is old and may have appeared in foundation-model pretraining. Exact deduplication does not remove all related threads or near-duplicates. Treat this as an accessible reference experiment; a fresh, independently labeled dataset would make the stronger blog result. Labels are topic categories, not an independently audited semantic truth for every stripped/truncated message.
+
+## More public benchmarks
+
+Five further well-known datasets cover different kinds of classification, so a single topic task does not decide the comparison:
+
+| Config | Task | Classes | Train labels/class | Val/class | Test/class (Jev calls) | Why it is included |
+|---|---|---:|---|---:|---:|---|
+| `ag_news` | News topic | 4 | 10, 50, 200, 1000 | 50 | 100 (400) | Classic topic benchmark; TF-IDF is strong once data is plentiful |
+| `dbpedia_14` | Wikipedia entity type | 14 | 10, 50, 200, 1000 | 50 | 50 (700) | More classes, short encyclopedic text |
+| `imdb` | Review sentiment | 2 | 10, 50, 200, 1000 | 50 | 200 (400) | Long texts; sentiment rather than topic |
+| `emotion` | Emotion in tweets | 6 | 10, 50, 200, 500 | 50 | 50 (300) | Short, noisy text; semantically close classes |
+| `banking77` | Customer intent | 77 | 5, 10, 20 | 5 | 10 (770) | Fine-grained few-shot regime where label descriptions should matter most |
+
+They are downloaded from the Hugging Face Hub, which needs one extra dependency:
+
+```bash
+python -m pip install -e '.[dev,public]'
+jev-bench list-datasets
+jev-bench prepare --config configs/ag_news.json --out data/ag_news
+jev-bench run --config configs/ag_news.json --data data/ag_news --out runs/ag_news
+```
+
+Or all of them (classical only):
+
+```bash
+for d in ag_news dbpedia_14 imdb emotion banking77; do
+  jev-bench prepare --config configs/$d.json --out data/$d
+  jev-bench run --config configs/$d.json --data data/$d --out runs/$d
+done
+```
+
+Add `--with-jev` to a run exactly as for 20 Newsgroups; the table above gives the number of paid requests per dataset.
+
+How they are prepared:
+
+- Test examples come only from each dataset's official test split. Everything else (including Emotion's official validation split) forms the pool for validation and training. IMDB's unlabeled split is ignored.
+- Exact normalized duplicates are removed with training-side texts kept first, so a test text that also appears in training is dropped from test.
+- `max_train_pool_per_class` stores only a shuffled subset of each class's training pool, keeping huge corpora such as DBpedia (560k training texts) small on disk. Every training budget is still sampled, nested, from that stored pool.
+- The Hub commit that was downloaded is recorded in the bundle's `metadata.json` (`provenance.hub_revision`) and in the report. Set `hub_revision` in the config to that value to rebuild the same data later.
+- Banking77 is read from `PolyAI/banking77`, falling back to the `mteb/banking77` mirror if the original repository cannot be loaded by your `datasets` version. The repository actually used is recorded.
+- DBpedia text is `title. content`. IMDB's `<br />` tags become line breaks.
+
+Category descriptions for Jev are in `src/jev_benchmark/public.py`. For AG News, DBpedia, IMDB and Emotion they are short hand-written definitions. Banking77's 77 descriptions are generated mechanically from the label names (for example `card_arrival` becomes "…whose intent is: card arrival."), so they add no extra hints; better descriptions may improve Jev and would be a legitimate part of its cost.
+
+Caveats: all five are widely used and very likely appear in foundation-model pretraining data, which can favour Jev. Budgets are balanced per class, so these results do not show behaviour under the original class imbalance. Banking77's 10 test examples per class give noisy per-class recall; raise `test_per_class` (the official test split has 40 per class) if the cost is acceptable. XGBoost is the slowest model on many-class data: Banking77 took about 9 minutes for the full classical grid on two threads.
 
 ## Add Jev
 
@@ -151,13 +208,17 @@ This initial project focuses on the classifier comparison. It does not yet imple
 python -m pytest -q
 ```
 
-Tests exercise all six model paths, dataset integrity, group leakage, nested training subsets, calibration ties, failed-request accounting, and the Jev HTTP contract/retry behavior through a mock transport. Mocked API tests do not validate live service quality or availability.
+Tests exercise all six model paths, preparation of every public dataset through a mocked Hub loader, dataset integrity, group leakage, nested training subsets, calibration ties, failed-request accounting, and the Jev HTTP contract/retry behavior through a mock transport. Mocked API tests do not validate live service quality or availability.
 
 ## Sources
 
 - [TypeSafe HTTP API](https://docs.typesafe.ai/api)
 - [TypeSafe confidence semantics](https://docs.typesafe.ai/confidence)
 - [scikit-learn: 20 Newsgroups](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.fetch_20newsgroups.html)
+- [AG News](https://huggingface.co/datasets/fancyzhx/ag_news) and [DBpedia-14](https://huggingface.co/datasets/fancyzhx/dbpedia_14) — Zhang, Zhao & LeCun, [Character-level Convolutional Networks for Text Classification](https://arxiv.org/abs/1509.01626)
+- [IMDB](https://huggingface.co/datasets/stanfordnlp/imdb) — Maas et al., [Learning Word Vectors for Sentiment Analysis](https://aclanthology.org/P11-1015/)
+- [Emotion](https://huggingface.co/datasets/dair-ai/emotion) — Saravia et al., [CARER](https://aclanthology.org/D18-1404/)
+- [Banking77](https://huggingface.co/datasets/PolyAI/banking77) — Casanueva et al., [Efficient Intent Detection with Dual Sentence Encoders](https://arxiv.org/abs/2003.04807)
 - [scikit-learn: probability calibration](https://scikit-learn.org/stable/modules/calibration.html)
 - [XGBoost Python API](https://xgboost.readthedocs.io/en/stable/python/python_api.html)
 - [Guo et al.: On Calibration of Modern Neural Networks](https://proceedings.mlr.press/v70/guo17a.html)

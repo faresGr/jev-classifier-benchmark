@@ -1,0 +1,92 @@
+{
+  "ag_news": {
+    "n": 400,
+    "jev_macro_f1": 0.8898931379958948,
+    "ece_10_bins": 0.07306414141414148,
+    "high_probability_count": 353,
+    "high_probability_correct": 328,
+    "high_probability_errors": 25,
+    "true_label_reported_zero": 12,
+    "training_labels_max_per_seed": 4000,
+    "additional_validation_labels": 200,
+    "best_observed_classical_at_max_budget": "linear_svm",
+    "classical_mean_macro_f1": 0.8655324823036615,
+    "paired_comparison": {
+      "difference": 0.024360655692233224,
+      "interval_95": [
+        -0.008114445393306427,
+        0.05868017828704032
+      ],
+      "bootstrap_samples": 5000,
+      "bootstrap_seed": 123,
+      "scope": "Paired class-stratified test resampling; mean of three fixed fitted baseline seeds. Conditional on selected models; excludes model-selection and training uncertainty."
+    },
+    "billing": {
+      "known_response_token_cost_usd": 0.008032835999999996,
+      "records_missing_usage": 0,
+      "unaccounted_retry_attempts": 0,
+      "note": "Token-only estimate; unknown attempt charges and local compute excluded"
+    },
+    "p50_ms": 249.62045848951675
+  },
+  "banking77": {
+    "n": 770,
+    "jev_macro_f1": 0.8094054712303191,
+    "ece_10_bins": 0.08032729896366267,
+    "high_probability_count": 541,
+    "high_probability_correct": 507,
+    "high_probability_errors": 34,
+    "true_label_reported_zero": 46,
+    "training_labels_max_per_seed": 1540,
+    "additional_validation_labels": 385,
+    "best_observed_classical_at_max_budget": "logreg",
+    "classical_mean_macro_f1": 0.776646016023482,
+    "paired_comparison": {
+      "difference": 0.032759455206837096,
+      "interval_95": [
+        0.006526109087899995,
+        0.060226950625941626
+      ],
+      "bootstrap_samples": 5000,
+      "bootstrap_seed": 123,
+      "scope": "Paired class-stratified test resampling; mean of three fixed fitted baseline seeds. Conditional on selected models; excludes model-selection and training uncertainty."
+    },
+    "billing": {
+      "known_response_token_cost_usd": 0.07990197600000001,
+      "records_missing_usage": 0,
+      "unaccounted_retry_attempts": 0,
+      "note": "Token-only estimate; unknown attempt charges and local compute excluded"
+    },
+    "p50_ms": 261.04225049493834
+  },
+  "emotion": {
+    "n": 300,
+    "jev_macro_f1": 0.49128054617013067,
+    "ece_10_bins": 0.3756397306397306,
+    "high_probability_count": 177,
+    "high_probability_correct": 102,
+    "high_probability_errors": 75,
+    "true_label_reported_zero": 57,
+    "training_labels_max_per_seed": 3000,
+    "additional_validation_labels": 300,
+    "best_observed_classical_at_max_budget": "xgboost_tfidf",
+    "classical_mean_macro_f1": 0.8173702396962325,
+    "paired_comparison": {
+      "difference": -0.3260896935261018,
+      "interval_95": [
+        -0.38938996814632737,
+        -0.2659397750116692
+      ],
+      "bootstrap_samples": 5000,
+      "bootstrap_seed": 123,
+      "scope": "Paired class-stratified test resampling; mean of three fixed fitted baseline seeds. Conditional on selected models; excludes model-selection and training uncertainty."
+    },
+    "billing": {
+      "known_response_token_cost_usd": 0.006057575999999999,
+      "records_missing_usage": 0,
+      "unaccounted_retry_attempts": 0,
+      "note": "Token-only estimate; unknown attempt charges and local compute excluded"
+    },
+    "p50_ms": 252.01381249644328
+  }
+}

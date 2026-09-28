@@ -1,4 +1,4 @@
-.venv/
+.venv*/
 .env
 __pycache__/
 *.egg-info/
@@ -6,3 +6,5 @@ __pycache__/
 data/
 runs/
 .cache/
+# Local patch exports can contain private session links.
+blog/*.patch

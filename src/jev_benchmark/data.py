@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .public import DATASETS as PUBLIC_DATASETS, fetch as fetch_public
+
 LABELS = {
     "comp.graphics": "Computer graphics, image rendering, graphics software and formats.",
     "rec.autos": "Cars, driving, automotive maintenance and vehicle purchasing.",
@@ -77,6 +79,7 @@ def prepare(config, destination, input_path=None, labels_path=None):
         raise ValueError(f"{dest} already exists; choose a new dataset directory")
     max_chars = config["max_chars"]
     dropped = 0
+    provenance = None
     if input_path:
         if not labels_path:
             raise ValueError("--labels is required for custom JSONL")
@@ -90,6 +93,8 @@ def prepare(config, destination, input_path=None, labels_path=None):
         source = config["dataset"]
         if source == "demo":
             raw = demo_rows()
+        elif source in PUBLIC_DATASETS:
+            raw, labels, provenance = fetch_public(source, str(dest.parent / ".cache"), config.get("hub_revision"))
         elif source == "newsgroups":
             from sklearn.datasets import fetch_20newsgroups
             raw = []
@@ -99,7 +104,7 @@ def prepare(config, destination, input_path=None, labels_path=None):
                 raw.extend({"text": text, "label": data.target_names[int(y)], "source_split": split}
                            for text, y in zip(data.data, data.target))
         else:
-            raise ValueError("dataset must be demo or newsgroups, or use --input")
+            raise ValueError(f"dataset must be one of demo, newsgroups, {', '.join(PUBLIC_DATASETS)}; or use --input")
         clean, seen = [], set()
         for r in raw:
             text = r["text"][:max_chars].strip()
@@ -121,11 +126,15 @@ def prepare(config, destination, input_path=None, labels_path=None):
                 test = [r for r in clean if r["label"] == label and r["source_split"] == "test"]
                 rng.shuffle(test)
                 if len(test) < ntest:
-                    raise ValueError(f"Not enough test examples for {label}")
+                    raise ValueError(f"Not enough test examples for {label}: {len(test)} available, {ntest} requested")
                 test = test[:ntest]
             if len(pool) < nval + max(config["train_per_class"]):
-                raise ValueError(f"Not enough train/validation examples for {label}")
-            for split, subset in [("validation", pool[:nval]), ("train", pool[nval:]), ("test", test)]:
+                raise ValueError(f"Not enough train/validation examples for {label}: {len(pool)} available, "
+                                 f"{nval + max(config['train_per_class'])} needed")
+            # Optional cap keeps huge public corpora small on disk; budgets are sampled from this pool.
+            cap = config.get("max_train_pool_per_class")
+            train = pool[nval:nval + cap] if cap else pool[nval:]
+            for split, subset in [("validation", pool[:nval]), ("train", train), ("test", test)]:
                 rows.extend({"id": r["id"], "text": r["text"], "label": label, "split": split} for r in subset)
     if "__REQUEST_FAILED__" in labels or len(labels) < 2 or not all(isinstance(k, str) and isinstance(v, str) for k, v in labels.items()):
         raise ValueError("labels must map at least two string labels to descriptions")
@@ -135,6 +144,7 @@ def prepare(config, destination, input_path=None, labels_path=None):
     dump(dest / "labels.json", labels)
     dump(dest / "metadata.json", {"source": source, "synthetic": source == "demo", "max_chars": max_chars,
          "split_seed": config["split_seed"], "preparation_config": config, "dropped_empty_or_duplicate": dropped,
+         "provenance": provenance,
          "labels_sha256": hashlib.sha256((dest / "labels.json").read_bytes()).hexdigest(),
          "examples_sha256": hashlib.sha256((dest / "examples.jsonl").read_bytes()).hexdigest()})
     return rows

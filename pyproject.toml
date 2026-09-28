@@ -11,6 +11,7 @@ dependencies = ["numpy>=1.26,<3", "scikit-learn>=1.6,<2", "matplotlib>=3.8,<4", 
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
+public = ["datasets>=3,<6"]
 
 [project.scripts]
 jev-bench = "jev_benchmark.cli:main"
